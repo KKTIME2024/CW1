@@ -1,0 +1,11 @@
+COMP2611 Part B - Experiment Summary
+==================================================
+
+Summary Statistics:
+| Algorithm | Avg Nodes | Avg Path Cost | Optimality Ratio |
+|-----------|-----------|---------------|------------------|
+| BFS        |     142.0 |          15.7 |             1.00 |
+| DFS-Fixed  |      53.7 |          27.0 |             0.62 |
+| DFS-Rand   |      50.2 |          20.7 |             0.75 |
+| BestFirst  |      78.7 |          21.7 |             0.72 |
+| A*         |     102.0 |          15.7 |             1.00 |
