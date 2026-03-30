@@ -1,0 +1,6 @@
+{
+    "editor.fontFamily": "'Maple Mono NF CN', monospace",
+    "terminal.integrated.fontFamily": "'Maple Mono NF CN'",
+    "debug.console.fontFamily": "'Maple Mono NF CN'",
+    "editor.fontLigatures": true
+}

@@ -4,9 +4,9 @@ import heapq
 import random
 import time
 from collections import deque
-from typing import Any, Callable
+from typing import Any
 
-from .common import Node, Problem, SearchResult, reconstruct_cost
+from .common import Node, Problem, SearchResult
 
 
 def bfs(
@@ -31,7 +31,6 @@ def bfs(
         node = q.popleft()
         if problem.is_goal(node.state):
             actions = node.iter_actions()
-            cost = reconstruct_cost(problem, start, actions)
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="bfs",
@@ -39,7 +38,7 @@ def bfs(
                 success=True,
                 nodes_expanded=nodes_expanded,
                 time_ms=int((end_t - start_t) * 1000),
-                path_cost=cost,
+                path_cost=node.g,
                 path_len=len(actions),
                 max_frontier=max_frontier,
                 action_path=actions,
@@ -49,13 +48,13 @@ def bfs(
             break
         nodes_expanded += 1
 
-        for action, nxt, _step_cost in problem.successors(node.state):
+        for action, nxt, step_cost in problem.successors(node.state):
             k = problem.state_key(nxt)
             if loop_check and k in visited:
                 continue
             if loop_check:
                 visited.add(k)
-            q.append(Node(state=nxt, parent=node, action=action, g=0.0, h=0.0))
+            q.append(Node(state=nxt, parent=node, action=action, g=node.g + float(step_cost), h=0.0))
 
     end_t = time.perf_counter()
     return SearchResult(
@@ -95,7 +94,6 @@ def dfs(
         node = stack.pop()
         if problem.is_goal(node.state):
             actions = node.iter_actions()
-            cost = reconstruct_cost(problem, start, actions)
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="dfs_random" if randomized else "dfs_fixed",
@@ -103,7 +101,7 @@ def dfs(
                 success=True,
                 nodes_expanded=nodes_expanded,
                 time_ms=int((end_t - start_t) * 1000),
-                path_cost=cost,
+                path_cost=node.g,
                 path_len=len(actions),
                 max_frontier=max_frontier,
                 action_path=actions,
@@ -117,13 +115,13 @@ def dfs(
         if randomized:
             rng.shuffle(succ)
         # DFS: push in reverse so the first successor is explored first.
-        for action, nxt, _step_cost in reversed(succ):
+        for action, nxt, step_cost in reversed(succ):
             k = problem.state_key(nxt)
             if loop_check and k in visited:
                 continue
             if loop_check:
                 visited.add(k)
-            stack.append(Node(state=nxt, parent=node, action=action, g=0.0, h=0.0))
+            stack.append(Node(state=nxt, parent=node, action=action, g=node.g + float(step_cost), h=0.0))
 
     end_t = time.perf_counter()
     return SearchResult(
@@ -165,7 +163,6 @@ def best_first(
         _prio, _t, node = heapq.heappop(heap)
         if problem.is_goal(node.state):
             actions = node.iter_actions()
-            cost = reconstruct_cost(problem, start, actions)
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="best_first",
@@ -173,7 +170,7 @@ def best_first(
                 success=True,
                 nodes_expanded=nodes_expanded,
                 time_ms=int((end_t - start_t) * 1000),
-                path_cost=cost,
+                path_cost=node.g,
                 path_len=len(actions),
                 max_frontier=max_frontier,
                 action_path=actions,
@@ -183,13 +180,19 @@ def best_first(
             break
         nodes_expanded += 1
 
-        for action, nxt, _step in problem.successors(node.state):
+        for action, nxt, step in problem.successors(node.state):
             k = problem.state_key(nxt)
             if loop_check and k in visited:
                 continue
             if loop_check:
                 visited.add(k)
-            nxt_node = Node(state=nxt, parent=node, action=action, g=0.0, h=problem.heuristic(nxt))
+            nxt_node = Node(
+                state=nxt,
+                parent=node,
+                action=action,
+                g=node.g + float(step),
+                h=problem.heuristic(nxt),
+            )
             heapq.heappush(heap, (nxt_node.h, tie, nxt_node))
             tie += 1
 
@@ -239,7 +242,6 @@ def astar(
 
         if problem.is_goal(node.state):
             actions = node.iter_actions()
-            cost = reconstruct_cost(problem, start, actions)
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="astar",
@@ -247,7 +249,7 @@ def astar(
                 success=True,
                 nodes_expanded=nodes_expanded,
                 time_ms=int((end_t - start_t) * 1000),
-                path_cost=cost,
+                path_cost=node.g,
                 path_len=len(actions),
                 max_frontier=max_frontier,
                 action_path=actions,
@@ -282,4 +284,3 @@ def astar(
         max_frontier=max_frontier,
         action_path=[],
     )
-

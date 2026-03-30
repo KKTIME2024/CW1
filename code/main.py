@@ -4,14 +4,17 @@ import argparse
 import csv
 import sys
 
+#导入必要的模块
 from search.experiments import run_experiment_matrix, run_single
 from search.registry import ALGORITHMS
 
-
+#定义一个函数来构建解析器
 def _build_parser() -> argparse.ArgumentParser:
+    #创建一个解析器对象
     parser = argparse.ArgumentParser(prog="comp2611-cw1-b")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
+    # 添加一个子命令：run，用于运行
     run = sub.add_parser("run", help="Run one algorithm on one case")
     run.add_argument("--case", default="easy", help="Case name (easy/medium/hard)")
     run.add_argument("--algo", default="astar", choices=sorted(ALGORITHMS.keys()))
@@ -19,6 +22,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-nodes", type=int, default=10000)
     run.add_argument("--no-loop-check", action="store_true")
 
+       # 添加一个子命令：experiment，用于实验
     exp = sub.add_parser("experiment", help="Run a standard experiment matrix")
     exp.add_argument("--seeds", type=int, default=5, help="How many seeds for randomized DFS")
     exp.add_argument("--max-nodes", type=int, default=10000)
@@ -27,7 +31,7 @@ def _build_parser() -> argparse.ArgumentParser:
 
     return parser
 
-
+# 解析命令行参数
 def _print_markdown_table(rows: list[dict]) -> None:
     if not rows:
         print("(no results)")

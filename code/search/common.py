@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Protocol
+from typing import Any, Iterable, Protocol
 
 
 class Problem(Protocol):
@@ -77,21 +77,3 @@ class Node:
             n = n.parent
         actions.reverse()
         return actions
-
-
-def reconstruct_cost(problem: Problem, initial_state: Any, actions: list[str]) -> float:
-    # We compute the cost by replaying the actions, so all algorithms use the same accounting.
-    state = initial_state
-    cost = 0.0
-    for act in actions:
-        matched = False
-        for a, nxt, step in problem.successors(state):
-            if a == act:
-                matched = True
-                state = nxt
-                cost += float(step)
-                break
-        if not matched:
-            raise RuntimeError(f"Action not replayable: {act}")
-    return cost
-

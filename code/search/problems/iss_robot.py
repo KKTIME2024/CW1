@@ -4,9 +4,6 @@ from dataclasses import dataclass
 from typing import Any, Iterable
 
 
-ROOMS = ("Storage_PMM", "Node_3", "Observatory", "Node_2", "US_Lab", "Airlock", "Columbus")
-
-
 def base_iss_map() -> dict[str, list[str]]:
     return {
         "Storage_PMM": ["Node_3"],
@@ -27,7 +24,7 @@ def base_move_cost(a: str, b: str) -> float:
 @dataclass(frozen=True)
 class ISSState:
     robot_loc: str
-    new_filter_loc: str  # Storage_PMM / US_Lab / carried / Columbus
+    new_filter_loc: str  # Storage_PMM / US_Lab / Node_2 / Node_3 / Airlock / Observatory / carried
     old_filter_loc: str  # US_Lab / Storage_PMM / carried
     toolbox_loc: str  # Storage_PMM / US_Lab / carried
     old_filter_removed: bool
@@ -48,44 +45,16 @@ def _carried_item(state: ISSState) -> str | None:
 
 def _set_loc(state: ISSState, obj: str, loc: str) -> ISSState:
     if obj == "new_filter":
-        return ISSState(
-            robot_loc=state.robot_loc,
-            new_filter_loc=loc,
-            old_filter_loc=state.old_filter_loc,
-            toolbox_loc=state.toolbox_loc,
-            old_filter_removed=state.old_filter_removed,
-            new_filter_installed=state.new_filter_installed,
-        )
+        return ISSState(state.robot_loc, loc, state.old_filter_loc, state.toolbox_loc, state.old_filter_removed, state.new_filter_installed)
     if obj == "old_filter":
-        return ISSState(
-            robot_loc=state.robot_loc,
-            new_filter_loc=state.new_filter_loc,
-            old_filter_loc=loc,
-            toolbox_loc=state.toolbox_loc,
-            old_filter_removed=state.old_filter_removed,
-            new_filter_installed=state.new_filter_installed,
-        )
+        return ISSState(state.robot_loc, state.new_filter_loc, loc, state.toolbox_loc, state.old_filter_removed, state.new_filter_installed)
     if obj == "toolbox":
-        return ISSState(
-            robot_loc=state.robot_loc,
-            new_filter_loc=state.new_filter_loc,
-            old_filter_loc=state.old_filter_loc,
-            toolbox_loc=loc,
-            old_filter_removed=state.old_filter_removed,
-            new_filter_installed=state.new_filter_installed,
-        )
+        return ISSState(state.robot_loc, state.new_filter_loc, state.old_filter_loc, loc, state.old_filter_removed, state.new_filter_installed)
     raise ValueError(obj)
 
 
 def _move_robot(state: ISSState, to_room: str) -> ISSState:
-    return ISSState(
-        robot_loc=to_room,
-        new_filter_loc=state.new_filter_loc,
-        old_filter_loc=state.old_filter_loc,
-        toolbox_loc=state.toolbox_loc,
-        old_filter_removed=state.old_filter_removed,
-        new_filter_installed=state.new_filter_installed,
-    )
+    return ISSState(to_room, state.new_filter_loc, state.old_filter_loc, state.toolbox_loc, state.old_filter_removed, state.new_filter_installed)
 
 
 def _shortest_paths(iss_map: dict[str, list[str]]) -> dict[tuple[str, str], float]:
@@ -119,15 +88,11 @@ class ISSRobotProblem:
         start_state: ISSState,
         goal_robot_loc: str = "Observatory",
         require_toolbox_returned: bool = True,
-        require_toolbox_present_for_us_lab_actions: bool = True,
-        require_toolbox_to_enter_us_lab: bool = False,
     ) -> None:
         self._map = iss_map
         self._start = start_state
         self._goal_robot_loc = goal_robot_loc
         self._require_toolbox_returned = require_toolbox_returned
-        self._require_toolbox_present_for_us_lab_actions = require_toolbox_present_for_us_lab_actions
-        self._require_toolbox_to_enter_us_lab = require_toolbox_to_enter_us_lab
         self._dist = _shortest_paths(iss_map)
 
     def initial_state(self) -> ISSState:
@@ -178,9 +143,6 @@ class ISSRobotProblem:
     def successors(self, state: ISSState) -> Iterable[tuple[str, ISSState, float]]:
         # Moves
         for to_room in self._map[state.robot_loc]:
-            if self._require_toolbox_to_enter_us_lab and to_room == "US_Lab":
-                if state.toolbox_loc != "carried":
-                    continue
             yield (f"Move({to_room})", _move_robot(state, to_room), base_move_cost(state.robot_loc, to_room))
 
         carried = _carried_item(state)
@@ -205,9 +167,6 @@ class ISSRobotProblem:
         # US_Lab actions
         if state.robot_loc == "US_Lab":
             toolbox_present = state.toolbox_loc in {"carried", "US_Lab"}
-            if self._require_toolbox_present_for_us_lab_actions and not toolbox_present:
-                toolbox_present = False
-
             if toolbox_present and (not state.old_filter_removed) and state.old_filter_loc == "US_Lab":
                 # Removal doesn't automatically pick the old filter (keeps carry constraint simple).
                 yield (
@@ -269,12 +228,9 @@ def build_case_problem(case_name: str) -> ISSRobotProblem:
 
     if case_name == "hard":
         iss_map = base_iss_map()
-        # Add one extra branch to increase branching factor.
-        iss_map["Node_2"] = list(iss_map["Node_2"]) + ["Columbus"]
-        iss_map["Columbus"] = ["Node_2"]
         start = ISSState(
             robot_loc="Node_3",
-            new_filter_loc="Columbus",
+            new_filter_loc="Node_2",
             old_filter_loc="US_Lab",
             toolbox_loc="Storage_PMM",
             old_filter_removed=False,
@@ -283,4 +239,3 @@ def build_case_problem(case_name: str) -> ISSRobotProblem:
         return ISSRobotProblem(iss_map=iss_map, start_state=start)
 
     raise ValueError(f"Unknown case: {case_name}")
-
