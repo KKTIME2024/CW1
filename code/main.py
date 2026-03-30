@@ -4,17 +4,16 @@ import argparse
 import csv
 import sys
 
-#导入必要的模块
-from search.experiments import run_experiment_matrix, run_single
+from search.problems.iss_robot import build_case_problem, list_cases
 from search.registry import ALGORITHMS
 
-#定义一个函数来构建解析器
+
+# CLI：用于快速跑单个算法/案例，或批量跑实验并导出 CSV
 def _build_parser() -> argparse.ArgumentParser:
-    #创建一个解析器对象
     parser = argparse.ArgumentParser(prog="comp2611-cw1-b")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    # 添加一个子命令：run，用于运行
+    # run：单次运行（一个 case + 一个算法）
     run = sub.add_parser("run", help="Run one algorithm on one case")
     run.add_argument("--case", default="easy", help="Case name (easy/medium/hard)")
     run.add_argument("--algo", default="astar", choices=sorted(ALGORITHMS.keys()))
@@ -22,7 +21,7 @@ def _build_parser() -> argparse.ArgumentParser:
     run.add_argument("--max-nodes", type=int, default=10000)
     run.add_argument("--no-loop-check", action="store_true")
 
-       # 添加一个子命令：experiment，用于实验
+    # experiment：批量实验（cases x algos），dfs_random 会按不同 seed 重复多次
     exp = sub.add_parser("experiment", help="Run a standard experiment matrix")
     exp.add_argument("--seeds", type=int, default=5, help="How many seeds for randomized DFS")
     exp.add_argument("--max-nodes", type=int, default=10000)
@@ -31,7 +30,8 @@ def _build_parser() -> argparse.ArgumentParser:
 
     return parser
 
-# 解析命令行参数
+
+# 以 Markdown 表格格式输出，方便直接粘贴到报告
 def _print_markdown_table(rows: list[dict]) -> None:
     if not rows:
         print("(no results)")
@@ -57,9 +57,11 @@ def main(argv: list[str]) -> int:
     args = parser.parse_args(argv)
 
     if args.cmd == "run":
-        res = run_single(
-            case_name=args.case,
-            algorithm=args.algo,
+        problem = build_case_problem(args.case)
+        fn = ALGORITHMS[args.algo]
+        res = fn(
+            problem=problem,
+            case=args.case,
             max_nodes=args.max_nodes,
             loop_check=not args.no_loop_check,
             seed=args.seed,
@@ -68,14 +70,34 @@ def main(argv: list[str]) -> int:
         return 0 if res.success else 2
 
     if args.cmd == "experiment":
-        results = run_experiment_matrix(
-            seeds=args.seeds,
-            max_nodes=args.max_nodes,
-            loop_check=not args.no_loop_check,
-        )
+        results = []
+        for case in list_cases():
+            for algo_name, fn in ALGORITHMS.items():
+                if algo_name == "dfs_random":
+                    for s in range(args.seeds):
+                        results.append(
+                            fn(
+                                problem=build_case_problem(case),
+                                case=case,
+                                max_nodes=args.max_nodes,
+                                loop_check=not args.no_loop_check,
+                                seed=s,
+                            )
+                        )
+                else:
+                    results.append(
+                        fn(
+                            problem=build_case_problem(case),
+                            case=case,
+                            max_nodes=args.max_nodes,
+                            loop_check=not args.no_loop_check,
+                            seed=0,
+                        )
+                    )
         rows = [r.to_row() for r in results]
         _print_markdown_table(rows)
         if args.csv:
+            # 导出 CSV：便于在 Excel/Sheets 里画图、算平均值
             with open(args.csv, "w", newline="", encoding="utf-8") as f:
                 w = csv.DictWriter(f, fieldnames=sorted(rows[0].keys()))
                 w.writeheader()

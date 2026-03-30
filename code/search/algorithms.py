@@ -1,5 +1,16 @@
 from __future__ import annotations
 
+"""
+搜索算法实现
+实现目标：
+- 统一的函数签名，便于在 CLI / 实验脚本里切换算法
+- 统一统计指标：nodes_expanded / time_ms / path_cost / path_len / max_frontier
+
+注意：
+- 本实现把每个动作的 step_cost 直接累加到 Node.g 中，因此 SearchResult.path_cost = 终点节点的 g 值。
+- BFS 这里按“队列层次”展开，语义上更接近“最少动作数”；但我们仍然会记录真实 path_cost（按 step_cost 累加）。
+"""
+
 import heapq
 import random
 import time
@@ -17,6 +28,7 @@ def bfs(
     loop_check: bool,
     seed: int = 0,
 ) -> SearchResult:
+    # Breadth-First Search：按“先入先出队列”逐层扩展
     start_t = time.perf_counter()
     start = problem.initial_state()
     start_key = problem.state_key(start)
@@ -79,6 +91,7 @@ def dfs(
     seed: int,
     randomized: bool,
 ) -> SearchResult:
+    # Depth-First Search：用栈（后进先出）深入搜索；可选固定顺序 or 随机顺序
     start_t = time.perf_counter()
     rng = random.Random(seed)
     start = problem.initial_state()
@@ -113,6 +126,7 @@ def dfs(
 
         succ = list(problem.successors(node.state))
         if randomized:
+            # 随机化动作顺序：用于对比 DFS 的不稳定性（不同 seed 可能走出不同路径）
             rng.shuffle(succ)
         # DFS: push in reverse so the first successor is explored first.
         for action, nxt, step_cost in reversed(succ):
@@ -145,6 +159,7 @@ def best_first(
     loop_check: bool,
     seed: int = 0,
 ) -> SearchResult:
+    # Best-First Search（贪心）：每次优先扩展 h(n) 最小的节点（忽略 g(n)）
     start_t = time.perf_counter()
     start = problem.initial_state()
     start_node = Node(state=start, parent=None, action=None, g=0.0, h=problem.heuristic(start))
@@ -218,6 +233,7 @@ def astar(
     loop_check: bool,
     seed: int = 0,
 ) -> SearchResult:
+    # A*：优先扩展 f(n)=g(n)+h(n) 最小的节点；用 best_g 做“代价层面的 loop checking”
     start_t = time.perf_counter()
     start = problem.initial_state()
     start_key = problem.state_key(start)
