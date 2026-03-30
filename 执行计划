@@ -1,0 +1,200 @@
+根据两个md文档的内容，我为你制定一份详细的执行计划：
+
+---
+
+# 🚀 COMP2611 Part B 执行计划（ISS场景）
+
+## 📋 项目概览
+
+| 项目 | 内容 |
+|------|------|
+| 场景 | 国际空间站(ISS)机器人维护任务 |
+| 核心房间数 | 6个 |
+| 关键物品 | Filter(滤芯)、Toolbox(工具箱) |
+| 算法 | BFS、DFS、Best-first、A* |
+
+---
+
+## 🗓️ 详细执行计划
+
+### 第一阶段：基础建模（约2小时）
+
+- `robot_location`: 机器人在哪个舱段
+- `new_filter_location`: 新滤芯位置（'Storage_PMM'/'US_Lab'/'carried'）
+- `old_filter_location`: 旧滤芯位置（'US_Lab'/'Storage_PMM'/'carried'）
+- `toolbox_location`: 工具箱位置（'Storage_PMM'/'carried'）
+- `old_filter_removed`: 布尔值，旧滤芯是否已从US_Lab卸下
+
+#### 1.2 动作定义（45分钟）
+
+**基础动作**：
+1. **Move(to_room)**: 移动到相邻房间
+2. **Pick(obj, from_room)**: 从房间拾取物品（前提：机器人未携带物品）
+3. **Drop(obj, to_room)**: 将携带的物品放到房间
+4. **Remove_Old_Filter**: 在US_Lab卸下旧滤芯（前提：携带工具箱）
+5. **Install_New_Filter**: 在US_Lab安装新滤芯
+
+**特殊约束**：
+1. **单物品约束**: 一次只能携带一个object移动
+2. **顺序约束**: 必须按顺序执行：取工具箱→US_Lab卸旧→送旧回PMM→取新滤芯→US_Lab安装→还工具箱
+3. **代价约束**: Node_2 → Airlock 代价为2，其他移动代价为1
+4. **US_Lab访问约束**: 进入US_Lab必须携带工具箱（用于卸旧滤芯）
+
+#### 1.3 地图实现（30分钟）
+```python
+iss_map = {
+    'Storage_PMM': ['Node_3'],
+    'Node_3':      ['Storage_PMM', 'Observatory', 'Node_2'],
+    'Observatory': ['Node_3'],
+    'Node_2':      ['Node_3', 'US_Lab', 'Airlock'],
+    'US_Lab':      ['Node_2'],
+    'Airlock':     ['Node_2']
+}
+
+# 移动代价表
+move_cost = {
+    ('Node_2', 'Airlock'): 2,
+    ('Airlock', 'Node_2'): 2,
+    # 其他相邻房间移动代价为1
+}
+
+#### 1.4 初始状态与目标状态（30分钟）
+```
+Initial State:
+- robot_location = 'Node_3'
+- filter_location = 'Storage_PMM'
+- toolbox_location = 'Storage_PMM'
+- filter_installed = False
+
+Goal State:
+- filter_installed = True
+- robot_location = 'Observatory'
+```
+
+---
+
+### 第二阶段：启发式函数设计（约1.5小时）
+
+#### 2.1 启发式函数公式（30分钟）
+
+
+#### 2.2 Admissible/Consistent分析（30分钟）
+- **Admissible**: 启发式使用最短路径距离，实际路径可能因约束更长 → 不会高估 ✓
+- **Consistent**: 每次移动的代价 ≥ 启发式差值 → 满足单调性 ✓
+
+#### 2.3 距离表预计算（30分钟）
+
+---
+
+### 第三阶段：搜索算法实现（约2小时）
+
+#### 3.1 基础算法实现（1小时）
+- **BFS**: 保证最短路径，但扩展节点多
+- **DFS (Fixed/Random)**: 可能陷入死胡同或找到次优解
+- **Best-first**: 仅使用h(n)，贪心策略
+- **A***: f(n) = g(n) + h(n)，最优且高效
+
+#### 3.2 循环检测（30分钟）
+- 实现`visited`集合记录已访问状态
+- 避免重复扩展相同状态
+
+#### 3.3 算法测试验证（30分钟）
+- 先用简单case验证各算法正确性
+- 确保能找到正确路径
+
+---
+
+### 第四阶段：测试用例设计（约1小时）
+
+#### 4.1 Easy Case（基础验证）
+```
+- 物品都在Storage_PMM
+- 标准地图连接
+- 目标：取物→安装→终点
+```
+
+#### 4.2 Medium Case（约束测试）
+```
+- 增加US_Lab进入限制
+- Node_2→Airlock代价为2
+- 测试约束对路径的影响
+```
+
+#### 4.3 Hard Case（扩展地图）
+```
+- 增加Columbus等额外舱段
+- 多物品收集任务
+- 更长路径规划
+```
+
+---
+
+### 第五阶段：实验执行（约2小时）
+
+#### 5.1 实验设置（30分钟）
+```
+统一参数：
+- max_nodes = 10000
+- 启用loop checking
+- 每个case运行5次取平均
+```
+
+#### 5.2 数据收集表格（30分钟）
+| Algorithm | Case | Nodes Expanded | Time (ms) | Path Cost | Success |
+|-----------|------|----------------|-----------|-----------|---------|
+| BFS | Easy | | | | |
+| DFS-Fixed | Easy | | | | |
+| DFS-Random | Easy | | | | |
+| Best-first | Easy | | | | |
+| A* | Easy | | | | |
+| ... | Medium | | | | |
+
+#### 5.3 运行实验并记录（1小时）
+- 运行所有算法×所有case的组合
+- 记录节点扩展数、运行时间、路径代价
+
+---
+
+### 第六阶段：报告撰写（约3小时）
+
+#### 6.1 B1 Scenario Design（45分钟）
+**内容结构**：
+1. 背景：ISS维护任务场景
+2. 状态表示：详细解释4元组
+3. 动作定义：5种动作及前置条件
+4. 初始/目标状态
+5. 地图连接图
+
+#### 6.2 B2 Heuristic Design（30分钟）
+**内容结构**：
+1. 启发式公式
+2. 设计思路解释
+3. Admissible证明
+4. Consistent证明
+
+#### 6.3 B3 Experimental Results（60分钟）
+**内容结构**：
+1. 实验设置说明
+2. 测试用例设计
+3. 数据表格（2-3个case）
+4. 结果可视化（可选：折线图/柱状图）
+
+#### 6.4 B4 Key Findings（45分钟）
+**内容结构**：
+- 算法对比发现
+- 启发式效果分析
+- 约束对搜索的影响
+- 实际应用启示
+
+---
+
+---
+
+## ⚠️ 关键检查点
+
+1. **状态定义是否完整？** 包含所有必要信息
+2. **启发式是否Admissible？** 不会高估实际代价
+3. **实验是否有对比意义？** 控制变量，只改变一个因素
+4. **结论是否有解释？** 不仅描述现象，还要分析原因
+
+---
