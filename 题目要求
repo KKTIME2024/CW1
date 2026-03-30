@@ -1,0 +1,40 @@
+B. Robot Worker Experimentation
+Starting with the code given in the Search Exercise 5 notebook create and investigate your own robot
+worker scenario. A relatively small modification of the given scenario is sufficient. But to obtain a high
+grade you will need to introduce some significant novelty. Take care not to increase the complexity of the
+problem too much (If there are too many choices, the algorithms may fail to solve even apparently simple
+problems.)
+Report sections and associated marks:
+B1. Design and describe a robot worker scenario.
+ [6 marks]
+B2. Describe and implement a heuristic suitable for your scenario.
+ [4 marks]
+B3. Investigate the performance of a variety of search algorithms when applied to your robot worker
+scenario, and present results in table form.
+ [4 marks]
+B4. Give key findings as concise bullet points.
+ [4 marks]
+[40 marks total]
+Read on for further details, suggestions and tips.
+2
+What and How to Investigate
+In order to obtain high marks, you will need to carry out a thorough investigation of search algorithms within
+the limitations of the search algorithm software with which you have been provided. You should aim to cover the
+following different types of search algorithm and options, as well as different levels of difficulty of the problem
+itself:
+• Different basic search algorithms
+– breadth-first,
+– depth-first, with fixed action choice ordering,
+– depth-first, with randomised action choice ordering,
+– best first,
+– A*.
+• Different heuristics for the informed search algorithms (best first and A*). These can be based on the
+ones given in Exercise 7, or you could design your own. To obtain the most credit for your investigation
+heuristics you would need to devise heuristics that are applicable to the whole family of sliding block
+puzzles that can be formulated in terms of the SlidingBlocksPuzzle class, not just ones that work only
+for a particular problem (such as the simple ones given in the Exercise 7 Colab notebook).
+• Whether or not loop checking is used.
+• Puzzles of different levels of difficulty. (Think about what factors may affect ‘difficulty’.)
+Note that the mark scheme for part A1 allows for some flexibility in where you put your effort. You could
+concentrate more on conducting a wide range of test cases, or you could try to develop a good general heuristic
+for this kind of puzzle.

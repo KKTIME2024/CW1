@@ -30,6 +30,7 @@ def bfs(
 ) -> SearchResult:
     # Breadth-First Search：按“先入先出队列”逐层扩展
     start_t = time.perf_counter()
+    heur_name = getattr(problem, "heuristic_name", "n/a")
     start = problem.initial_state()
     start_key = problem.state_key(start)
 
@@ -46,6 +47,7 @@ def bfs(
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="bfs",
+                heuristic=heur_name,
                 case=case,
                 success=True,
                 nodes_expanded=nodes_expanded,
@@ -71,6 +73,7 @@ def bfs(
     end_t = time.perf_counter()
     return SearchResult(
         algorithm="bfs",
+        heuristic=heur_name,
         case=case,
         success=False,
         nodes_expanded=nodes_expanded,
@@ -93,6 +96,7 @@ def dfs(
 ) -> SearchResult:
     # Depth-First Search：用栈（后进先出）深入搜索；可选固定顺序 or 随机顺序
     start_t = time.perf_counter()
+    heur_name = getattr(problem, "heuristic_name", "n/a")
     rng = random.Random(seed)
     start = problem.initial_state()
     start_key = problem.state_key(start)
@@ -110,6 +114,7 @@ def dfs(
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="dfs_random" if randomized else "dfs_fixed",
+                heuristic=heur_name,
                 case=case,
                 success=True,
                 nodes_expanded=nodes_expanded,
@@ -140,6 +145,7 @@ def dfs(
     end_t = time.perf_counter()
     return SearchResult(
         algorithm="dfs_random" if randomized else "dfs_fixed",
+        heuristic=heur_name,
         case=case,
         success=False,
         nodes_expanded=nodes_expanded,
@@ -161,6 +167,7 @@ def best_first(
 ) -> SearchResult:
     # Best-First Search（贪心）：每次优先扩展 h(n) 最小的节点（忽略 g(n)）
     start_t = time.perf_counter()
+    heur_name = getattr(problem, "heuristic_name", "n/a")
     start = problem.initial_state()
     start_node = Node(state=start, parent=None, action=None, g=0.0, h=problem.heuristic(start))
 
@@ -181,6 +188,7 @@ def best_first(
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="best_first",
+                heuristic=heur_name,
                 case=case,
                 success=True,
                 nodes_expanded=nodes_expanded,
@@ -214,6 +222,7 @@ def best_first(
     end_t = time.perf_counter()
     return SearchResult(
         algorithm="best_first",
+        heuristic=heur_name,
         case=case,
         success=False,
         nodes_expanded=nodes_expanded,
@@ -235,6 +244,7 @@ def astar(
 ) -> SearchResult:
     # A*：优先扩展 f(n)=g(n)+h(n) 最小的节点；用 best_g 做“代价层面的 loop checking”
     start_t = time.perf_counter()
+    heur_name = getattr(problem, "heuristic_name", "n/a")
     start = problem.initial_state()
     start_key = problem.state_key(start)
     start_node = Node(state=start, parent=None, action=None, g=0.0, h=problem.heuristic(start))
@@ -261,6 +271,7 @@ def astar(
             end_t = time.perf_counter()
             return SearchResult(
                 algorithm="astar",
+                heuristic=heur_name,
                 case=case,
                 success=True,
                 nodes_expanded=nodes_expanded,
@@ -291,6 +302,7 @@ def astar(
     end_t = time.perf_counter()
     return SearchResult(
         algorithm="astar",
+        heuristic=heur_name,
         case=case,
         success=False,
         nodes_expanded=nodes_expanded,

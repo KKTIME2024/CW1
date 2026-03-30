@@ -19,6 +19,7 @@ class Problem(Protocol):
 @dataclass(frozen=True)
 class SearchResult:
     algorithm: str
+    heuristic: str
     case: str
     success: bool
     nodes_expanded: int
@@ -32,6 +33,7 @@ class SearchResult:
         row = {
             "case": self.case,
             "algorithm": self.algorithm,
+            "heuristic": self.heuristic,
             "success": self.success,
             "nodes_expanded": self.nodes_expanded,
             "time_ms": self.time_ms,
@@ -45,6 +47,7 @@ class SearchResult:
         lines = [
             f"case={self.case}",
             f"algorithm={self.algorithm}",
+            f"heuristic={self.heuristic}",
             f"success={self.success}",
             f"nodes_expanded={self.nodes_expanded}",
             f"time_ms={self.time_ms}",

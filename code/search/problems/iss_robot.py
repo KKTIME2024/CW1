@@ -10,11 +10,20 @@ ISS 机器人维护任务（Part B 的“谜题/问题设置”）
 
 核心约束（让问题有“新意”，但不至于爆炸）：
 - 单物品携带：工具箱/新滤芯/旧滤芯一次只能携带一个（carried）
+- 物品操作限制：只允许在指定房间 Pick/Drop（减少无意义分支，专注寻路）
 - 代价：Node_2 <-> Airlock 的移动代价为 2，其余边为 1
+- 任务要求：旧滤芯必须送回 Storage_PMM
 """
 
 from dataclasses import dataclass
 from typing import Any, Iterable
+
+
+HEURISTICS: tuple[str, ...] = ("waypoints", "next", "goal", "zero")
+
+
+def list_heuristics() -> list[str]:
+    return list(HEURISTICS)
 
 
 def base_iss_map() -> dict[str, list[str]]:
@@ -105,11 +114,15 @@ class ISSRobotProblem:
         start_state: ISSState,
         goal_robot_loc: str = "Observatory",
         require_toolbox_returned: bool = True,
+        heuristic_name: str = "waypoints",
     ) -> None:
+        if heuristic_name not in HEURISTICS:
+            raise ValueError(f"Unknown heuristic: {heuristic_name}")
         self._map = iss_map
         self._start = start_state
         self._goal_robot_loc = goal_robot_loc
         self._require_toolbox_returned = require_toolbox_returned
+        self.heuristic_name = heuristic_name
         self._dist = _shortest_paths(iss_map)
 
     def initial_state(self) -> ISSState:
@@ -118,6 +131,9 @@ class ISSRobotProblem:
     def is_goal(self, state: ISSState) -> bool:
         # 目标：新滤芯已装好 + 机器人到 Observatory + （可选）工具箱已归还 Storage_PMM
         if not state.new_filter_installed:
+            return False
+        # 旧滤芯必须送回 Storage_PMM（新约束）
+        if state.old_filter_loc != "Storage_PMM":
             return False
         if state.robot_loc != self._goal_robot_loc:
             return False
@@ -128,13 +144,8 @@ class ISSRobotProblem:
     def state_key(self, state: ISSState) -> Any:
         return state
 
-    def heuristic(self, state: ISSState) -> float:
-        # 启发式（Waypoint / 分阶段目标）：
-        # 依照“必须完成的子目标顺序”列出剩余必经房间，然后把这些房间之间的最短路距离相加。
-        # 这相当于一个放松问题（忽略部分约束带来的绕路），通常是可采纳的 admissible heuristic。
-        def d(a: str, b: str) -> float:
-            return self._dist.get((a, b), float("inf"))
-
+    def _remaining_waypoints(self, state: ISSState) -> list[str]:
+        # 依照当前进度，输出“剩余必经房间”的有序列表（用于启发式计算）
         W: list[str] = []
         if not state.old_filter_removed:
             if state.toolbox_loc != "carried" and state.toolbox_loc != state.robot_loc:
@@ -151,9 +162,25 @@ class ISSRobotProblem:
 
         if state.robot_loc != self._goal_robot_loc:
             W.append(self._goal_robot_loc)
+        return W
 
+    def heuristic(self, state: ISSState) -> float:
+        # 启发式（Waypoint / 分阶段目标）：
+        # 依照“必须完成的子目标顺序”列出剩余必经房间，然后把这些房间之间的最短路距离相加。
+        # 这相当于一个放松问题（忽略部分约束带来的绕路），通常是可采纳的 admissible heuristic。
+        def d(a: str, b: str) -> float:
+            return self._dist.get((a, b), float("inf"))
+
+        if self.heuristic_name == "zero":
+            return 0.0
+        if self.heuristic_name == "goal":
+            return d(state.robot_loc, self._goal_robot_loc)
+
+        W = self._remaining_waypoints(state)
         if not W:
             return 0.0
+        if self.heuristic_name == "next":
+            return d(state.robot_loc, W[0])
 
         total = d(state.robot_loc, W[0])
         for i in range(len(W) - 1):
@@ -167,6 +194,18 @@ class ISSRobotProblem:
 
         carried = _carried_item(state)
 
+        # 物品 Pick/Drop 的允许房间（把 Node_2/Node_3/Airlock/Observatory 当作“走廊节点”，不做物品操作）
+        pick_rooms = {
+            "toolbox": {"Storage_PMM", "US_Lab"},
+            "new_filter": {"Storage_PMM"},
+            "old_filter": {"US_Lab"},
+        }
+        drop_rooms = {
+            "toolbox": {"Storage_PMM", "US_Lab"},
+            "new_filter": {"Storage_PMM"},
+            "old_filter": {"Storage_PMM"},
+        }
+
         # 2) Pick：如果没携带物品，可以拾取当前房间内的物品（代价=0）
         if carried is None:
             for obj, loc in (
@@ -175,14 +214,25 @@ class ISSRobotProblem:
                 ("old_filter", state.old_filter_loc),
             ):
                 if loc == state.robot_loc:
+                    # 只允许在指定房间进行 Pick（减少“拿着到处乱走/乱丢”的分支）
+                    if state.robot_loc not in pick_rooms[obj]:
+                        continue
+                    # 旧滤芯必须先拆下才能拿走
+                    if obj == "old_filter" and not state.old_filter_removed:
+                        continue
+                    # 新滤芯一旦安装完成，不允许再被 Pick（更贴近现实，也减少无意义分支）
+                    if obj == "new_filter" and state.new_filter_installed:
+                        continue
                     nxt = _set_loc(state, obj, "carried")
                     yield (f"Pick({obj})", nxt, 0.0)
 
         # 3) Drop：把携带的物品放到当前房间（代价=0）
         if carried is not None:
             obj = carried
-            nxt = _set_loc(state, obj, state.robot_loc)
-            yield (f"Drop({obj})", nxt, 0.0)
+            # 只允许在指定房间进行 Drop
+            if state.robot_loc in drop_rooms[obj]:
+                nxt = _set_loc(state, obj, state.robot_loc)
+                yield (f"Drop({obj})", nxt, 0.0)
 
         # 4) US_Lab 专属动作：拆旧滤芯、装新滤芯（都要求工具箱在 US_Lab 或被携带）
         if state.robot_loc == "US_Lab":
@@ -222,7 +272,7 @@ def list_cases() -> list[str]:
     return ["easy", "medium", "hard"]
 
 
-def build_case_problem(case_name: str) -> ISSRobotProblem:
+def build_case_problem(case_name: str, *, heuristic_name: str = "waypoints") -> ISSRobotProblem:
     # 将字符串 case_name 映射到不同的初始状态（从而制造不同难度）
     if case_name == "easy":
         iss_map = base_iss_map()
@@ -234,7 +284,7 @@ def build_case_problem(case_name: str) -> ISSRobotProblem:
             old_filter_removed=False,
             new_filter_installed=False,
         )
-        return ISSRobotProblem(iss_map=iss_map, start_state=start)
+        return ISSRobotProblem(iss_map=iss_map, start_state=start, heuristic_name=heuristic_name)
 
     if case_name == "medium":
         iss_map = base_iss_map()
@@ -246,18 +296,18 @@ def build_case_problem(case_name: str) -> ISSRobotProblem:
             old_filter_removed=False,
             new_filter_installed=False,
         )
-        return ISSRobotProblem(iss_map=iss_map, start_state=start)
+        return ISSRobotProblem(iss_map=iss_map, start_state=start, heuristic_name=heuristic_name)
 
     if case_name == "hard":
         iss_map = base_iss_map()
         start = ISSState(
-            robot_loc="Node_3",
-            new_filter_loc="Node_2",
+            robot_loc="Airlock",
+            new_filter_loc="Storage_PMM",
             old_filter_loc="US_Lab",
             toolbox_loc="Storage_PMM",
             old_filter_removed=False,
             new_filter_installed=False,
         )
-        return ISSRobotProblem(iss_map=iss_map, start_state=start)
+        return ISSRobotProblem(iss_map=iss_map, start_state=start, heuristic_name=heuristic_name)
 
     raise ValueError(f"Unknown case: {case_name}")
