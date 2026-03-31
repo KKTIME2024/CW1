@@ -1,234 +1,136 @@
-COMP2611 Coursework 1 - Part B (Robot Worker Experimentation)
+下面是基于你真实数据和刚才分析**重写后的版本**。我主要做了三件事：
 
-**Executive Summary**
-This report presents a comprehensive investigation of search algorithms applied to an International Space Station (ISS) robot maintenance task. The scenario involves a robot that must replace an air filter in the US_Lab module while adhering to constraints including single-object carrying, US_Lab access requirements, and asymmetric movement costs. Five search algorithms (BFS, DFS-fixed, DFS-random, best-first, A*) were evaluated across three difficulty levels with four different heuristics. Key findings show that A* with the waypoints heuristic provides optimal solutions with efficient search, while best-first offers faster but suboptimal solutions. DFS algorithms, though requiring fewer node expansions, produce significantly longer paths.
+* 去掉“贪心陷阱”的错误表述
+* 强化 heuristic vs algorithm 的关系
+* 让 B.3 / B.4 更像“实验论证”，而不是描述
 
-B1. Scenario Design
+整体风格保持你原来的结构，但更偏论文表达。
 
-Background
-- An ISS maintenance robot must replace an air filter in the US_Lab module and finish at the Observatory.
-- The robot operates in a small graph of connected modules with one special costed edge.
+---
 
-Map (rooms and connectivity)
-Rooms: Storage_PMM, Node_3, Observatory, Node_2, US_Lab, Airlock
-Adjacency (undirected):
-- Storage_PMM <-> Node_3
-- Node_3 <-> Observatory
-- Node_3 <-> Node_2
-- Node_2 <-> US_Lab
-- Node_2 <-> Airlock
+## B.1. My Robot Scenario: ISS Maintenance Task
 
-Move costs
-- cost(Node_2, Airlock) = 2 (both directions)
-- all other adjacent moves cost 1
+**Scenario Overview**
+This scenario models a robotic maintenance task on the ISS. The robot must retrieve a toolbox and a new filter, perform a replacement in the lab, and return all items to storage before ending at the Observatory.
 
-State representation
-State is a 6-tuple:
-(robot_loc, new_filter_loc, old_filter_loc, toolbox_loc, old_filter_removed, new_filter_installed)
+The core challenge lies in the interaction between **sequential task constraints** and a **tree-structured spatial topology**. Unlike standard pathfinding problems, this scenario introduces interleaved symbolic (task dependency) and geometric (navigation) constraints, making naive shortest-path heuristics insufficient.
 
-Domains
-- robot_loc in {Storage_PMM, Node_3, Observatory, Node_2, US_Lab, Airlock}
-- new_filter_loc in {Storage_PMM, US_Lab, carried}
-- old_filter_loc in {US_Lab, Storage_PMM, carried}
-- toolbox_loc in {Storage_PMM, US_Lab, carried}
-- old_filter_removed in {True, False}
-- new_filter_installed in {True, False}
+**Environment Layout (Rooms & Connectivity)**
 
-Actions (preconditions -> effects)
-1) Move(to)
-- Pre: to is adjacent to robot_loc; cost = move_cost(robot_loc, to)
-- Eff: robot_loc := to
+* **Storage_PMM**: stores toolbox and new filter
+* **US_Lab**: maintenance location
+* **Node_2 & Node_3**: transit hubs
+* **Observatory**: final goal location
+* **Airlock**: leaf node
 
-2) Pick(obj)
-- Pre: obj at robot_loc; robot not carrying any other object
-- Eff: obj_loc := carried
+All connections are bidirectional. All edge costs are 1.0 except `Node_2 ↔ Airlock`, which is 2.0.
 
-3) Drop(obj)
-- Pre: obj_loc == carried
-- Eff: obj_loc := robot_loc
+**Objects and Constraints**
 
-4) Remove_Old_Filter
-- Pre: robot_loc == US_Lab; toolbox_loc == carried; old_filter_removed == False
-- Eff: old_filter_removed := True; old_filter_loc := robot_loc
+* Items: Toolbox, New Filter, Old Filter
+* Capacity: only one item can be carried at a time
+* Preconditions:
 
-5) Install_New_Filter
-- Pre: robot_loc == US_Lab; toolbox_loc == carried; new_filter_loc == carried; old_filter_removed == True
-- Eff: new_filter_installed := True; new_filter_loc := US_Lab
+  * Old filter can only be removed in `US_Lab` with toolbox
+  * New filter can only be installed if toolbox is in `US_Lab`
 
-Constraints / novelty
-- Single-object carry: at most one object may be carried at a time.
-- Access constraint: entering US_Lab requires carrying the toolbox.
-- Asymmetric cost: Node_2 <-> Airlock has cost 2; all other moves cost 1.
+**Robot Actions**
+Move, Pick, Drop, Remove_Old_Filter, Install_New_Filter
 
-Initial state
-robot_loc = Node_3
-new_filter_loc = Storage_PMM
-old_filter_loc = US_Lab
-toolbox_loc = Storage_PMM
-old_filter_removed = False
-new_filter_installed = False
+**Goal State**
+New filter installed, both toolbox and old filter returned to storage, and robot ends at Observatory.
 
-Goal test
-new_filter_installed == True
-AND robot_loc == Observatory
-AND toolbox_loc == Storage_PMM  (toolbox returned)
+---
 
-B2. Heuristic Design
+## B.2. Heuristic(s): The "Waypoints" Logic
 
-Let d(x, y) be the shortest-path distance between rooms x and y using the move costs above.
-We define an admissible heuristic by summing distances between remaining mandatory waypoints in the fixed task order.
-This uses a relaxed problem (ignores the one-object carry and US_Lab access constraint), so it cannot overestimate.
+To guide search under strong task dependencies, we design a **Waypoints heuristic** that encodes the required execution order.
 
-Remaining waypoint list (ordered)
-Given state s, build a list W as follows:
-1) If old_filter_removed is False:
-   - If toolbox_loc != carried, append toolbox_loc (Storage_PMM or US_Lab).
-   - Append US_Lab.
-2) Else if old_filter_loc != Storage_PMM:
-   - Append Storage_PMM.
-3) Else if new_filter_installed is False:
-   - If new_filter_loc != carried, append new_filter_loc (Storage_PMM).
-   - Append US_Lab.
-4) Else if toolbox_loc != Storage_PMM:
-   - Append Storage_PMM.
-5) If robot_loc != Observatory, append Observatory.
+**Definition**
+Let the remaining task be represented as an ordered waypoint sequence:
 
-Heuristic value
-- If W is empty, h(s) = 0.
-- Otherwise, h(s) = d(robot_loc, W[0]) + sum_{i=0..len(W)-2} d(W[i], W[i+1]).
+[
+W(n) = [w_1, w_2, ..., w_k]
+]
 
-Admissibility
-- The waypoint list encodes the remaining required locations in the necessary task order.
-- The heuristic ignores extra detours caused by carrying limits and access constraints.
-- Therefore it underestimates the true remaining cost and is admissible.
+The heuristic is defined as:
 
-Consistency (sketch)
-- Each term uses shortest-path distances, which satisfy triangle inequality.
-- Non-move actions occur at the current room, so removing a waypoint does not reduce h by more than the action cost.
-- Move actions can change robot_loc by one edge, so h decreases by at most that move cost.
-- Hence h is consistent.
+[
+h(n) = dist(pos(n), w_1) + \sum_{i=1}^{k-1} dist(w_i, w_{i+1})
+]
 
-B3. Experimental Results
+where distances are precomputed using shortest paths.
 
-**Experimental Setup**
-Algorithms tested:
-- BFS (Breadth-First Search)
-- DFS with fixed action order (DFS-Fixed)
-- DFS with randomized action order (DFS-Random)
-- Best-first search (greedy heuristic search)
-- A* search (optimal heuristic search)
+**Interpretation**
+Instead of estimating distance to the final goal only, the heuristic approximates the cost of completing all remaining subgoals in order. This effectively embeds **task structure into spatial estimation**.
 
-**Common experimental parameters:**
-- Loop checking: Enabled (prevents revisiting states)
-- Maximum nodes: 10,000 (search termination limit)
-- Randomized DFS: 5 random seeds (results show mean ± standard deviation)
-- All algorithms: Implemented with consistent cost accumulation
-- Environment: Python 3.x on standard hardware
+**Comparison with Goal-only Heuristic**
 
-**Performance metrics collected:**
-- Nodes expanded: Number of states explored
-- Time (ms): Execution time in milliseconds
-- Path cost: Total movement cost of solution
-- Success: Whether a solution was found within node limit
+* Goal-only: spatially aware, but ignores task sequence
+* Waypoints: encodes both spatial distance and task progression
 
-**Visualization**
-The following charts provide visual summaries of the experimental results:
-1. **Figure 1**: Nodes expanded comparison across algorithms and cases
-2. **Figure 2**: Path cost comparison with optimal cost reference line
-3. **Figure 3**: Heuristic effectiveness for A* search
+Thus, Goal-only heuristics are **spatially aware but temporally blind**, while Waypoints incorporate both dimensions.
 
-Test cases
+**Admissibility**
+The heuristic is admissible because it ignores action costs (pick/drop, etc.) and assumes unobstructed movement. Since all omitted costs are non-negative, it remains a lower bound on the true cost.
 
+---
 
-Easy
-- Base map as defined above.
-- All objects start in Storage_PMM, robot at Node_3.
+## B.3. Results
 
-Medium
-- Same map, but start robot at Airlock and place toolbox at US_Lab.
-- Highlights the US_Lab access constraint and asymmetric cost.
+We evaluated A*, BFS, DFS, and Greedy Best-First across Easy, Medium, and Hard settings.
 
-Hard
-- Same map, start robot at Airlock, toolbox at Storage_PMM.
-- Requires robot to travel from Airlock to Storage_PMM to get toolbox, then to US_Lab.
-- Tests longer planning with multiple constraints.
+| Algorithm      | Heuristic     | Case | Nodes Expanded | Path Cost |
+| :------------- | :------------ | :--- | :------------- | :-------- |
+| **A***         | **Waypoints** | Hard | **103**        | **18.0**  |
+| **A***         | Goal-only     | Hard | 123            | 18.0      |
+| **BFS**        | N/A           | Hard | 141            | 18.0      |
+| **Best-First** | Waypoints     | Hard | **81**         | 24.0      |
+| **DFS_Fixed**  | N/A           | Hard | 50             | 24.0      |
 
-Results table template (fill with measured data)
+**Efficiency**
+A* with Waypoints reduces node expansions by ~27% compared to BFS (103 vs 141) while maintaining optimal cost. This shows that incorporating task structure significantly improves pruning effectiveness.
 
-Case: Easy
-| Algorithm | Heuristic | Nodes Expanded | Time (ms) | Path Cost | Success |
-|-----------|-----------|----------------|-----------|-----------|---------|
-| BFS       | None      | 141            | 0         | 15        | Yes     |
-| DFS-Fixed | None      | 48             | 0         | 21        | Yes     |
-| DFS-Rand  | None      | 52 ± 7.8       | 0         | 19.8 ± 4.5 | Yes    |
-| BestFirst | waypoints | 79             | 0         | 21        | Yes     |
-| BestFirst | goal      | 116            | 0         | 15        | Yes     |
-| BestFirst | next      | 122            | 0         | 15        | Yes     |
-| BestFirst | zero      | 141            | 0         | 15        | Yes     |
-| A*        | waypoints | 103            | 0         | 15        | Yes     |
-| A*        | goal      | 123            | 0         | 15        | Yes     |
-| A*        | next      | 116            | 0         | 15        | Yes     |
-| A*        | zero      | 132            | 0         | 15        | Yes     |
+**Optimality**
+A* consistently finds optimal solutions across all heuristics. In contrast, Greedy Best-First produces suboptimal paths when combined with Waypoints (e.g., 24 vs optimal 18), despite expanding fewer nodes.
 
-Case: Medium
-| Algorithm | Heuristic | Nodes Expanded | Time (ms) | Path Cost | Success |
-|-----------|-----------|----------------|-----------|-----------|---------|
-| BFS       | None      | 144            | 0         | 14        | Yes     |
-| DFS-Fixed | None      | 63             | 0         | 36        | Yes     |
-| DFS-Rand  | None      | 44.6 ± 12.9    | 0         | 19.6 ± 5.0 | Yes    |
-| BestFirst | waypoints | 76             | 0         | 20        | Yes     |
-| BestFirst | goal      | 118            | 0         | 14        | Yes     |
-| BestFirst | next      | 120            | 0         | 14        | Yes     |
-| BestFirst | zero      | 144            | 0         | 14        | Yes     |
-| A*        | waypoints | 100            | 0         | 14        | Yes     |
-| A*        | goal      | 127            | 0         | 14        | Yes     |
-| A*        | next      | 121            | 0         | 14        | Yes     |
-| A*        | zero      | 135            | 0         | 14        | Yes     |
+Importantly, Greedy with simpler heuristics (Goal / Zero) still finds optimal solutions in this domain. This indicates that suboptimality is not inherent to Greedy itself, but arises from the interaction with the heuristic.
 
-Case: Hard
-| Algorithm | Heuristic | Nodes Expanded | Time (ms) | Path Cost | Success |
-|-----------|-----------|----------------|-----------|-----------|---------|
-| BFS       | None      | 141            | 0         | 18        | Yes     |
-| DFS-Fixed | None      | 50             | 0         | 24        | Yes     |
-| DFS-Rand  | None      | 54 ± 5.4       | 0         | 22.8 ± 4.5 | Yes    |
-| BestFirst | waypoints | 81             | 0         | 24        | Yes     |
-| BestFirst | goal      | 117            | 0         | 18        | Yes     |
-| BestFirst | next      | 123            | 0         | 18        | Yes     |
-| BestFirst | zero      | 141            | 0         | 18        | Yes     |
-| A*        | waypoints | 103            | 0         | 18        | Yes     |
-| A*        | goal      | 123            | 0         | 18        | Yes     |
-| A*        | next      | 116            | 0         | 18        | Yes     |
-| A*        | zero      | 132            | 0         | 18        | Yes     |
+**Interpretation**
+For Greedy Best-First, the heuristic does not merely estimate cost—it effectively determines the search policy. The Waypoints heuristic enforces a fixed task sequence, which reduces exploration but may deviate from the true cost-optimal ordering.
 
-B4. Key Findings
+---
 
-Based on the experimental results, the following key observations can be made:
+## B.4. Key Findings
 
-**Algorithm Performance Comparison**
-- **A* vs BFS**: A* with waypoints heuristic consistently found optimal paths (same cost as BFS) while expanding significantly fewer nodes (103 vs 141 in Easy case, 100 vs 144 in Medium, 103 vs 141 in Hard).
-- **Best-first vs A***: Best-first with waypoints heuristic expanded the fewest nodes (79 in Easy, 76 in Medium, 81 in Hard) but often found suboptimal paths (higher path costs: 21 vs 15 in Easy, 20 vs 14 in Medium, 24 vs 18 in Hard).
-- **DFS Performance**: DFS algorithms expanded the fewest nodes overall (48-63 for fixed, 45-54 for random) but found significantly longer paths, demonstrating their non-optimal nature.
+**1. BFS and A* Cost Equivalence in Tree Structures**
+BFS consistently finds solutions with the same cost as A*. This follows from two properties:
 
-**Heuristic Effectiveness**
-- **Waypoints heuristic**: Most effective for both A* and best-first, providing the best balance between node expansion reduction and path optimality.
-- **Goal heuristic**: Performed well for A* (optimal paths) but required more node expansions than waypoints.
-- **Next heuristic**: Similar performance to goal heuristic but slightly better for A* in some cases.
-- **Zero heuristic**: Equivalent to uniform-cost search for A*, performing worse than informed heuristics.
+* The environment is a tree: there is exactly one simple path between any two states
+* All relevant edges have uniform cost
 
-**Search Difficulty Analysis**
-- **Medium case**: Most challenging for BFS (144 nodes expanded) due to the robot starting at Airlock with toolbox at US_Lab, requiring careful planning around the access constraint.
-- **Hard case**: Required longest optimal paths (cost 18) but had similar node expansion counts to Easy case, suggesting the problem structure remained manageable.
-- **DFS variability**: Randomized DFS showed significant standard deviation in path costs (4.5-5.0) and nodes expanded (5.4-12.9), highlighting its unpredictability.
+Under these conditions, minimizing steps (BFS) is equivalent to minimizing path cost (A*).
 
-**Constraint Impact**
-- **Single-carry constraint**: Increased search complexity by limiting action choices, particularly affecting DFS which often found longer detour paths.
-- **US_Lab access constraint**: Created critical decision points in the search space, especially evident in Medium case where the robot needed to retrieve the toolbox before entering US_Lab.
-- **Asymmetric cost**: The Node_2 ↔ Airlock cost of 2 influenced optimal path planning, with algorithms correctly avoiding unnecessary traversals of this expensive edge.
+---
 
-**Practical Implications**
-- For this ISS maintenance task, A* with waypoints heuristic provides the best trade-off: guaranteed optimality with efficient search.
-- Best-first search can be useful when computational resources are limited and near-optimal solutions are acceptable.
-- DFS should be avoided for critical path planning tasks due to its non-optimal and unpredictable nature.
+**2. Heuristics Must Encode Task Structure**
+The Waypoints heuristic demonstrates that effective heuristics in this domain must capture **task progression**, not just spatial proximity. By incorporating subgoal ordering, A* avoids exploring invalid or premature action sequences.
 
-**Conclusion**
-This investigation successfully demonstrated the application of various search algorithms to a realistic ISS robot maintenance scenario. The waypoints heuristic proved to be both admissible and effective, significantly reducing search effort while maintaining optimality in A* search. The constraints introduced (single-carry, access requirements, asymmetric costs) created a search problem with meaningful complexity that highlighted the strengths and weaknesses of different algorithmic approaches. The results provide practical guidance for selecting appropriate search strategies for similar robotic planning tasks in constrained environments.
+---
+
+**3. Heuristic Sensitivity Across Algorithms**
+The same heuristic can have fundamentally different effects depending on the search algorithm:
+
+* In A*, Waypoints improves efficiency while preserving optimality
+* In Greedy Best-First, it acts as a **policy constraint**, not just an estimator
+
+As a result, Greedy becomes highly sensitive to heuristic design.
+
+---
+
+**4. Robustness vs. Bias Correction**
+A* is robust to heuristic bias due to the corrective role of path cost ( g(n) ). In contrast, Greedy Best-First lacks this correction mechanism and fully commits to the heuristic.
+
+This explains why Waypoints improves A* but can degrade Greedy performance:
+the issue is not misleading local minima, but **over-constraining the search trajectory**.
+
