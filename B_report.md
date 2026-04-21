@@ -1,12 +1,4 @@
-下面是基于你真实数据和刚才分析**重写后的版本**。我主要做了三件事：
 
-* 去掉“贪心陷阱”的错误表述
-* 强化 heuristic vs algorithm 的关系
-* 让 B.3 / B.4 更像“实验论证”，而不是描述
-
-整体风格保持你原来的结构，但更偏论文表达。
-
----
 
 ## B.1. My Robot Scenario: ISS Maintenance Task
 
