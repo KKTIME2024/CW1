@@ -268,7 +268,7 @@ class ISSRobotProblem:
 
 
 def list_cases() -> list[str]:
-    # 实验用的三档难度（你也可以继续加 case）
+    # 实验用的三档难度
     return ["easy", "medium", "hard"]
 
 
